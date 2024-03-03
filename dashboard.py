@@ -22,6 +22,18 @@ app.layout = dbc.Container(fluid=True, children=[
     ])
 ])
 
+# Defining a callback to update switch status and the LED visual rep. on the dashboard
+# Code is a bit incomplete as it is not attached to the LED right now and is missing the code for the LED itself
+@app.callback(
+    [Output('switch-status', 'children'),
+     Output('toggle-switch', 'on')],
+    [Input('toggle-switch', 'on')]
+)
+def update_switch_and_led_status(on):
+    switch_status = 'ON' if on else 'OFF'
+    # The BooleanSwitch 'on' property is already bound to the switch status, so it will represent the LED status.
+    # Here we need to add code to communicate with the Raspberry Pi to actually turn the LED on or off.
+    return f'LED is {switch_status}', on
 
 # Running 
 if __name__ == '__main__':
