@@ -7,7 +7,7 @@ data to the cloud or a local server. Finally, we will design and develop a web-b
 control and monitor the system. 
 
 ## Contributors
-- Sadaf Zakria
-* Ilan Trutner
-+ Amirreza Saeidi
+- Sadaf Zakria 
+* Ilan Trutner TBD
++ Amirreza Saeidi TBD
 
