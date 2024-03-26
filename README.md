@@ -8,6 +8,5 @@ control and monitor the system.
 
 ## Contributors
 - Sadaf Zakria 
-* Ilan Trutner TBD
-+ Amirreza Saeidi TBD
+* Amirreza Saeidi 
 
