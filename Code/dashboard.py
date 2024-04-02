@@ -3,8 +3,11 @@ import dash_bootstrap_components as dbc
 import dash_daq as daq
 from dash import html, dcc, Input, Output
 import RPi.GPIO as GPIO
-import time
 from Freenove_DHT import DHT  # Import the DHT class from Freenove_DHT module
+import yagmail  # Import yagmail for sending emails
+import imaplib
+import email
+from email.header import decode_header
 
 # GPIO setup
 GPIO.setwarnings(False)
@@ -12,6 +15,10 @@ GPIO.setmode(GPIO.BCM)  # Set GPIO mode to BCM mode
 LED_PIN = 20
 DHT_PIN = 17  # Pin connected to DHT11 sensor
 GPIO.setup(LED_PIN, GPIO.OUT)
+GPIO.setup(DHT_PIN, GPIO.OUT)  # Set up DHT11 pin as output
+
+# Initialize yagmail SMTP connection
+yag = yagmail.SMTP('szakria03@gmail.com', 'eniwgbsodjybyoae')
 
 # Initialize Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
@@ -55,6 +62,7 @@ app.layout = dbc.Container(fluid=True, children=[
                                 size=200
                             ),
                         ], className='six columns'),
+
                         html.Div([
                             html.H2("Humidity", className="text-center text-white"),
                             daq.Gauge(
@@ -76,12 +84,100 @@ app.layout = dbc.Container(fluid=True, children=[
         ], width=6),
     ]),
 
+    html.Div(id='fan-status', children="Fan is off", className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),  # Fan status display
+
     dcc.Interval(
         id='interval-component',
-        interval=5*1000,  # in milliseconds
+        interval=10*1000,  # in milliseconds
         n_intervals=0
     )
 ])
+
+# Initialize email_sent variable
+email_sent = False
+
+# Send email
+def send_email(subject, body, to_email):
+    try:
+        yag.send(to=to_email, subject=subject, contents=body)
+        print("Email sent successfully!")
+        email_sent = True
+    except Exception as e:
+        print("Failed to send email:", str(e))
+        
+# Check for email response and control fan accordingly
+fan_turned_on = False
+
+# Check for email response and control fan accordingly
+def check_email_response(email_address, password):
+    global fan_turned_on
+    global email_sent
+
+    # Stop checking email if fan is turned on
+    if fan_turned_on and email_sent:
+        return "Fan is on"
+        
+    imap_server = 'imap.gmail.com'  # Change this to your email provider's IMAP server
+
+    # Connect to the IMAP server
+    mail = imaplib.IMAP4_SSL(imap_server)
+    mail.login(email_address, password)
+    mail.select('inbox')  # Select the mailbox you want to access
+
+    # Search for unseen emails in the inbox
+    status, data = mail.search(None, 'UNSEEN')
+    if status == 'OK':
+        email_ids = data[0].split()
+        if email_ids:  # Check if there are unseen emails
+            latest_email_id = email_ids[-1]  # Get the ID of the most recent unseen email
+            status, msg_data = mail.fetch(latest_email_id, '(RFC822)')
+            if status == 'OK':
+                for response_part in msg_data:
+                    if isinstance(response_part, tuple):
+                        msg = email.message_from_bytes(response_part[1])
+                        content = get_email_content(msg)
+                        if "yes turn on" in content.lower() and fan_turned_on:
+                            mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
+                            print("Fan is on!")
+                            return "Fan is on"  # Return fan status
+                        elif "yes turn on" in content.lower() and not fan_turned_on:
+                            mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
+                            fan_turned_on = True
+                            print("Fan is on!")
+                            return "Fan is on"  # Return fan status
+                        else:
+                            mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
+                            return "Fan is off"  # Return fan status
+        else:
+            print("No unseen emails found")
+    else:
+        print("Failed to search for unseen emails")
+
+    mail.logout()
+
+
+def get_email_content(msg):
+    # Extract content from email
+    content = ''
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            if content_type == 'text/plain' or content_type == 'text/html':
+                payload = part.get_payload(decode=True)
+                try:
+                    content += payload.decode('utf-8')
+                except UnicodeDecodeError:
+                    # If decoding with utf-8 fails, try decoding with latin-1
+                    content += payload.decode('latin-1')
+    else:
+        payload = msg.get_payload(decode=True)
+        try:
+            content += payload.decode('utf-8')
+        except UnicodeDecodeError:
+            # If decoding with utf-8 fails, try decoding with latin-1
+            content += payload.decode('latin-1')
+    return content
+
 
 # Callback to update temperature and humidity readings
 @app.callback(
@@ -90,11 +186,21 @@ app.layout = dbc.Container(fluid=True, children=[
     [Input('interval-component', 'n_intervals')]
 )
 def update_data(n):
+    global email_sent  # Access the global email_sent variable
     # Create DHT object
     dht = DHT(DHT_PIN)
     # Read temperature and humidity from DHT11 sensor
     chk = dht.readDHT11()
     if chk == dht.DHTLIB_OK:
+        # Check if temperature exceeds 24 degrees and email has not been sent
+        if dht.temperature > 20 and not email_sent:
+            # Send email notification
+            email_subject = "Temperature Alert"
+            email_body = f"The current temperature is {dht.temperature}°C. Would you like to turn on the fan?"
+            send_email(email_subject, email_body, "zakriasadaf9@gmail.com")
+            email_sent = True  # Set email_sent flag to True
+        elif dht.temperature <= 20:
+            email_sent = False  # Reset email_sent flag if temperature falls below 24 degrees
         return dht.temperature, dht.humidity
     else:
         # Return default values in case of error
@@ -111,6 +217,15 @@ def update_switch_and_led_status(on):
     img_src = "/assets/light_on.png" if on else "/assets/light_off.png"
     GPIO.output(LED_PIN, on)  # Turn LED on/off based on the switch's state
     return f'LED is {switch_status}', img_src
+
+# Callback to update fan status
+@app.callback(
+    Output('fan-status', 'children'),
+    [Input('interval-component', 'n_intervals')]
+)
+def update_fan_status(n):
+    fan_status = check_email_response("szakria03@gmail.com", "eniwgbsodjybyoae")  
+    return fan_status
 
 # Run the app
 if __name__ == '__main__':
