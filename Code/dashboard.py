@@ -8,6 +8,7 @@ import yagmail  # Import yagmail for sending emails
 import imaplib
 import email
 from email.header import decode_header
+import datetime
 
 # GPIO setup
 GPIO.setwarnings(False)
@@ -32,10 +33,19 @@ app.layout = dbc.Container(fluid=True, children=[
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
+                    #date time here
+                    html.H1(datetime.datetime.now().strftime("%H:%M"), className='text-center text-white mb-4', style={'font-family': 'Courier New'}),
+                    html.H3(datetime.datetime.now().strftime("%A"), className='text-center text-white mb-0', style={'font-family': 'Courier New'}),
+                    html.H3(datetime.datetime.now().strftime("%B %d, %Y"), className='text-center text-white mt-0', style={'font-family': 'Courier New'}),
+                ])
+            ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New', 'margin-bottom': '20px'}),
+
+            dbc.Card([
+                dbc.CardBody([
                     html.H2("LED Status", className="text-center text-white mb-4"),
                     html.Div([
                         html.Img(id='led-image', src='/assets/light_off.png', style={'width': '50px', 'height': '50px'}),
-                        daq.BooleanSwitch(id='toggle-switch', on=False, style={'transform': 'scale(2)', 'margin-top': '20px'}),
+                        daq.BooleanSwitch(id='toggle-switch', on=False, style={'transform': 'scale(2)', 'margin-top': '40px', 'margin-bottom': '20px'}),
                         html.Div(id='switch-status', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
                     ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
                 ]),
@@ -46,12 +56,12 @@ app.layout = dbc.Container(fluid=True, children=[
                     ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
                 ]),
                 dbc.CardBody([
-                html.H2("Fan Status", className="text-center text-white mb-4"),
-                html.Div([
-                    html.Img(id='fan-image', src='/assets/fan_off.jpg', style={'width': '100px', 'height': '100px'}),
-                    html.Div(id='fan-status', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
-                ],style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
-            ])
+                    html.H2("Fan Status", className="text-center text-white mb-4"),
+                    html.Div([
+                        html.Img(id='fan-image', src='/assets/fan_off.jpg', style={'width': '100px', 'height': '100px'}),
+                        html.Div(id='fan-status', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
+                    ],style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
+                ])
             ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'}),  # Adjusted width to fill the container
         ], width=6),
 
@@ -96,9 +106,13 @@ app.layout = dbc.Container(fluid=True, children=[
             ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'}),
         ], width=6),
     ]),
-    html.Div(id='names', children="2024- Sadaf Zakria & Amirezza Saeidi", className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),  # Fan status display
-
-    
+    html.Div([
+        dbc.Row([
+            dbc.Col([
+                html.Div(id='names', children="2024- Sadaf Zakria & Amirezza Saeidi", className='text-center text-white', style={'font-family': 'Courier New'}),
+            ], width=12)
+        ], style={'position': 'fixed', 'bottom': '0', 'width': '100%', 'padding': '10px', 'background-color': '#333333'})
+    ]),  # Fan status display
 
     dcc.Interval(
         id='interval-component',
@@ -121,6 +135,7 @@ def send_email(subject, body, to_email):
 
 # Check for email response and control fan accordingly
 fan_turned_on = False
+fan_status = 'Fan is off'
 
 # Check for email response and control fan accordingly
 def check_email_response(email_address, password):
@@ -163,8 +178,8 @@ def check_email_response(email_address, password):
                         else:
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
                             return "Fan is off"  # Return fan status
-        else:
-            print("No unseen emails found")
+        #else:
+            #print("No unseen emails found")
     else:
         print("Failed to search for unseen emails")
 
@@ -208,13 +223,13 @@ def update_data(n):
     chk = dht.readDHT11()
     if chk == dht.DHTLIB_OK:
         # Check if temperature exceeds 24 degrees and email has not been sent
-        if dht.temperature > 20 and not email_sent:
+        if dht.temperature > 24 and not email_sent:
             # Send email notification
             email_subject = "Temperature Alert"
             email_body = f"The current temperature is {dht.temperature}°C. Would you like to turn on the fan?"
             send_email(email_subject, email_body, "zakriasadaf9@gmail.com")
             email_sent = True  # Set email_sent flag to True
-        elif dht.temperature <= 20:
+        elif dht.temperature <= 24:
             email_sent = False  # Reset email_sent flag if temperature falls below 24 degrees
         return dht.temperature, dht.humidity
     else:
@@ -240,11 +255,13 @@ def update_switch_and_led_status(on):
     [Input('interval-component', 'n_intervals')]
 )
 def update_fan_status(n):
-    fan_status = check_email_response("szakria03@gmail.com", "eniwgbsodjybyoae")
+    global fan_status
+    new_fan_status = check_email_response("szakria03@gmail.com", "eniwgbsodjybyoae")
+    if new_fan_status is not None:
+        fan_status = new_fan_status
     img_src = "/assets/fan_on1.gif" if fan_status.lower() == "fan is on" else "/assets/fan_off.jpg"
     return fan_status, img_src
 
 # Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
-
