@@ -38,7 +38,20 @@ app.layout = dbc.Container(fluid=True, children=[
                         daq.BooleanSwitch(id='toggle-switch', on=False, style={'transform': 'scale(2)', 'margin-top': '20px'}),
                         html.Div(id='switch-status', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
                     ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
-                ])
+                ]),
+                dbc.CardBody([
+                    html.H2("______________________", className="text-center text-white mb-4"),
+                    html.Div([
+                        html.Div(id='line', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
+                    ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
+                ]),
+                dbc.CardBody([
+                html.H2("Fan Status", className="text-center text-white mb-4"),
+                html.Div([
+                    html.Img(id='fan-image', src='/assets/fan_off.jpg', style={'width': '100px', 'height': '100px'}),
+                    html.Div(id='fan-status', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
+                ],style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
+            ])
             ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'}),  # Adjusted width to fill the container
         ], width=6),
 
@@ -56,7 +69,7 @@ app.layout = dbc.Container(fluid=True, children=[
                                 value=20,
                                 showCurrentValue=True,
                                 units="°C",
-                                color={"gradient": True, "ranges": {"green": [0, 25], "yellow": [25, 35], "red": [35, 40]}},
+                                color={"gradient": True, "ranges": {"blue": [0, 25], "purple": [25, 35], "pink": [35, 40]}},
                                 label='Temperature',
                                 labelPosition='bottom',
                                 size=200
@@ -72,7 +85,7 @@ app.layout = dbc.Container(fluid=True, children=[
                                 value=50,
                                 showCurrentValue=True,
                                 units="%",
-                                color={"gradient": True, "ranges": {"green": [0, 60], "yellow": [60, 80], "red": [80, 100]}},
+                                color={"gradient": True, "ranges": {"blue": [0, 60], "purple": [60, 80], "pink": [80, 100]}},
                                 label='Humidity',
                                 labelPosition='bottom',
                                 size=200
@@ -83,12 +96,13 @@ app.layout = dbc.Container(fluid=True, children=[
             ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'}),
         ], width=6),
     ]),
+    html.Div(id='names', children="2024- Sadaf Zakria & Amirezza Saeidi", className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),  # Fan status display
 
-    html.Div(id='fan-status', children="Fan is off", className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),  # Fan status display
+    
 
     dcc.Interval(
         id='interval-component',
-        interval=10*1000,  # in milliseconds
+        interval=5*1000,  # in milliseconds
         n_intervals=0
     )
 ])
@@ -104,7 +118,7 @@ def send_email(subject, body, to_email):
         email_sent = True
     except Exception as e:
         print("Failed to send email:", str(e))
-        
+
 # Check for email response and control fan accordingly
 fan_turned_on = False
 
@@ -116,7 +130,7 @@ def check_email_response(email_address, password):
     # Stop checking email if fan is turned on
     if fan_turned_on and email_sent:
         return "Fan is on"
-        
+
     imap_server = 'imap.gmail.com'  # Change this to your email provider's IMAP server
 
     # Connect to the IMAP server
@@ -139,6 +153,7 @@ def check_email_response(email_address, password):
                         if "yes turn on" in content.lower() and fan_turned_on:
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
                             print("Fan is on!")
+                            fan_turned_on = True
                             return "Fan is on"  # Return fan status
                         elif "yes turn on" in content.lower() and not fan_turned_on:
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
@@ -220,13 +235,16 @@ def update_switch_and_led_status(on):
 
 # Callback to update fan status
 @app.callback(
-    Output('fan-status', 'children'),
+    [Output('fan-status', 'children'),
+     Output('fan-image', 'src')],
     [Input('interval-component', 'n_intervals')]
 )
 def update_fan_status(n):
-    fan_status = check_email_response("szakria03@gmail.com", "eniwgbsodjybyoae")  
-    return fan_status
+    fan_status = check_email_response("szakria03@gmail.com", "eniwgbsodjybyoae")
+    img_src = "/assets/fan_on1.gif" if fan_status.lower() == "fan is on" else "/assets/fan_off.jpg"
+    return fan_status, img_src
 
 # Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
+
