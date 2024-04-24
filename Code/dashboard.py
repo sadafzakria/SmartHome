@@ -1,14 +1,15 @@
 import dash
 import dash_bootstrap_components as dbc
 import dash_daq as daq
-from dash import html, dcc, Input, Output
-import RPi.GPIO as GPIO
+from dash import html, dcc
 from Freenove_DHT import DHT  # Import the DHT class from Freenove_DHT module
 import yagmail  # Import yagmail for sending emails
 import imaplib
 import email
 from email.header import decode_header
 import datetime
+import RPi.GPIO as GPIO
+from dash.dependencies import Output, Input
 
 # GPIO setup
 GPIO.setwarnings(False)
@@ -22,83 +23,78 @@ GPIO.setup(DHT_PIN, GPIO.OUT)  # Set up DHT11 pin as output
 yag = yagmail.SMTP('szakria03@gmail.com', 'eniwgbsodjybyoae')
 
 # Initialize Dash app
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MORPH])
 
 # Define layout of the dashboard
 app.layout = dbc.Container(fluid=True, children=[
-    html.H1("IoT Dashboard", className='text-center text-primary mb-4'),
+    html.H1("IoT Dashboard", className='text-center text-primary-emphasis mb-4'),
 
     dbc.Row([
         # LED Column
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    #date time here
-                    html.H1(datetime.datetime.now().strftime("%H:%M"), className='text-center text-white mb-4', style={'font-family': 'Courier New'}),
-                    html.H3(datetime.datetime.now().strftime("%A"), className='text-center text-white mb-0', style={'font-family': 'Courier New'}),
-                    html.H3(datetime.datetime.now().strftime("%B %d, %Y"), className='text-center text-white mt-0', style={'font-family': 'Courier New'}),
+                    # Date and Time
+                    html.H1(datetime.datetime.now().strftime("%H:%M"), className='text-center text-secondary-emphasis mb-4', style={'font-family': 'Courier New'}),
+                    html.H3(datetime.datetime.now().strftime("%A"), className='text-center text-secondary-emphasis mb-0', style={'font-family': 'Courier New'}),
+                    html.H3(datetime.datetime.now().strftime("%B %d, %Y"), className='text-center text-secondary-emphasismt-0', style={'font-family': 'Courier New'}),
                 ])
             ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New', 'margin-bottom': '20px'}),
 
             dbc.Card([
                 dbc.CardBody([
-                    html.H2("LED Status", className="text-center text-white mb-4"),
+                    html.H2("LED Status", className="text-center text-secondary-emphasis mb-4"),
                     html.Div([
                         html.Img(id='led-image', src='/assets/light_off.png', style={'width': '50px', 'height': '50px'}),
                         daq.BooleanSwitch(id='toggle-switch', on=False, style={'transform': 'scale(2)', 'margin-top': '40px', 'margin-bottom': '20px'}),
-                        html.Div(id='switch-status', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
+                        html.Div(id='switch-status', className='text-center text-secondary-emphasis', style={'font-family': 'Courier New', 'margin-top': '20px'}),
                     ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
                 ]),
+                
+            ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New', 'margin-bottom': '20px'}),  # Adjusted width to fill the container
+            dbc.Card([
                 dbc.CardBody([
-                    html.H2("______________________", className="text-center text-white mb-4"),
-                    html.Div([
-                        html.Div(id='line', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
-                    ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
-                ]),
-                dbc.CardBody([
-                    html.H2("Fan Status", className="text-center text-white mb-4"),
+                    html.H2("Fan Status", className="text-center text-secondary-emphasis mb-4"),
                     html.Div([
                         html.Img(id='fan-image', src='/assets/fan_off.jpg', style={'width': '100px', 'height': '100px'}),
-                        html.Div(id='fan-status', className='text-center text-white', style={'font-family': 'Courier New', 'margin-top': '20px'}),
+                        html.Div(id='fan-status', className='text-center text-secondary-emphasis', style={'font-family': 'Courier New', 'margin-top': '20px'}),
                     ],style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
                 ])
-            ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'}),  # Adjusted width to fill the container
+            ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New', 'margin-bottom': '20px'}),
         ], width=6),
 
-        # Temperature and Humidity Column
+        # Temperature and Humidity Column 
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row([
                         html.Div([
-                            html.H2("Temperature", className="text-center text-white"),
+                            html.H2("Temperature", className="text-center text-secondary-emphasis"),
                             daq.Gauge(
                                 id='temperature-gauge',
+                                showCurrentValue=True,
+                                units="°C",
+                                label='Temperature',
                                 max=40,
                                 min=0,
                                 value=20,
-                                showCurrentValue=True,
-                                units="°C",
-                                color={"gradient": True, "ranges": {"blue": [0, 25], "purple": [25, 35], "pink": [35, 40]}},
-                                label='Temperature',
-                                labelPosition='bottom',
-                                size=200
+                                size=200,
+                                color="#00008B",
                             ),
                         ], className='six columns'),
 
                         html.Div([
-                            html.H2("Humidity", className="text-center text-white"),
+                            html.H2("Humidity", className="text-center text-secondary-emphasis"),
                             daq.Gauge(
                                 id='humidity-gauge',
+                                showCurrentValue=True,
+                                units="%",
+                                label='Humidity',
                                 max=100,
                                 min=0,
                                 value=50,
-                                showCurrentValue=True,
-                                units="%",
-                                color={"gradient": True, "ranges": {"blue": [0, 60], "purple": [60, 80], "pink": [80, 100]}},
-                                label='Humidity',
-                                labelPosition='bottom',
-                                size=200
+                                size=200,
+                                color="#00008B",
                             ),
                         ], className='six columns'),
                     ]),
@@ -109,7 +105,7 @@ app.layout = dbc.Container(fluid=True, children=[
     html.Div([
         dbc.Row([
             dbc.Col([
-                html.Div(id='names', children="2024- Sadaf Zakria & Amirezza Saeidi", className='text-center text-white', style={'font-family': 'Courier New'}),
+                html.Div(id='names', children="2024- Sadaf Zakria & Amirezza Saeidi", className='text-center text-secondary-emphasis', style={'font-family': 'Courier New'}),
             ], width=12)
         ], style={'position': 'fixed', 'bottom': '0', 'width': '100%', 'padding': '10px', 'background-color': '#333333'})
     ]),  # Fan status display
@@ -126,6 +122,7 @@ email_sent = False
 
 # Send email
 def send_email(subject, body, to_email):
+    global email_sent  # Access the global email_sent variable
     try:
         yag.send(to=to_email, subject=subject, contents=body)
         print("Email sent successfully!")
