@@ -16,6 +16,10 @@ GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)  # Set GPIO mode to BCM mode
 LED_PIN = 20
 DHT_PIN = 17  # Pin connected to DHT11 sensor
+MOTOR_ENABLE_PIN = 22
+MOTOR_PIN = 23
+MOTOR_PIN2 = 12
+GPIO.setup(MOTOR_ENABLE_PIN,GPIO.OUT)
 GPIO.setup(LED_PIN, GPIO.OUT)
 GPIO.setup(DHT_PIN, GPIO.OUT)  # Set up DHT11 pin as output
 
@@ -168,11 +172,13 @@ def check_email_response(email_address, password):
                             fan_turned_on = True
                             return "Fan is on"  # Return fan status
                         elif "yes turn on" in content.lower() and not fan_turned_on:
+                            GPIO.output(MOTOR_ENABLE_PIN, GPIO.HIGH)
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
                             fan_turned_on = True
                             print("Fan is on!")
                             return "Fan is on"  # Return fan status
                         else:
+                            GPIO.output(MOTOR_ENABLE_PIN, GPIO.LOW)
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
                             return "Fan is off"  # Return fan status
         #else:
@@ -220,13 +226,13 @@ def update_data(n):
     chk = dht.readDHT11()
     if chk == dht.DHTLIB_OK:
         # Check if temperature exceeds 24 degrees and email has not been sent
-        if dht.temperature > 24 and not email_sent:
+        if dht.temperature > 20 and not email_sent:
             # Send email notification
             email_subject = "Temperature Alert"
             email_body = f"The current temperature is {dht.temperature}°C. Would you like to turn on the fan?"
             send_email(email_subject, email_body, "zakriasadaf9@gmail.com")
             email_sent = True  # Set email_sent flag to True
-        elif dht.temperature <= 24:
+        elif dht.temperature <= 20:
             email_sent = False  # Reset email_sent flag if temperature falls below 24 degrees
         return dht.temperature, dht.humidity
     else:
