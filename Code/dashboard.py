@@ -47,6 +47,11 @@ DHT_PIN = 17  # Pin connected to DHT11 sensor
 GPIO.setup(LED_PIN, GPIO.OUT)
 GPIO.setup(DHT_PIN, GPIO.OUT)  # Set up DHT11 pin as outputz
 
+MOTOR_ENABLE_PIN = 22
+MOTOR_PIN = 23
+MOTOR_PIN2 = 12
+GPIO.setup(MOTOR_ENABLE_PIN,GPIO.OUT)
+
 # Initialize yagmail SMTP connection
 yag = yagmail.SMTP('szakria03@gmail.com', 'eniwgbsodjybyoae')
 
@@ -86,7 +91,7 @@ app.layout = dbc.Container(fluid=True, children=[
                                     marks={0: '0', 400: '400', 800: '800', 1000: '1000'},
                                 ),
                                 html.Div(id='slider-tooltip', className='text-center text-secondary-emphasis', style={'margin-top': '25px'}),
-                            ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center'}),
+                            ], style={'display': 'flex', 'flex-direction': 'column', 'align-items': 'center', 'margin-bottom': '20px'}),
                         ]),
                     ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New', 'margin-bottom': '20px', 'align-items': 'center'}),
                 ], width=7),
@@ -173,21 +178,23 @@ app.layout = dbc.Container(fluid=True, children=[
 
     dcc.Interval(
         id='interval-component',
-        interval=5*1000,  # in milliseconds
+        interval=2*1000,  # in milliseconds
         n_intervals=0
     )
 ])
 
 # Initialize email_sent + light_email_sent variable
 email_sent = False
+#global light_email_sent 
 light_email_sent = False
 
 # Send email
 def send_email(subject, body, to_email):
     global email_sent  # Access the global email_sent variable
+    global light_email_sent
     try:
         yag.send(to=to_email, subject=subject, contents=body)
-        print("Light email sent successfully!")
+        
         if subject == "Temperature Alert":
             print("Temperature email sent successfully!")
             email_sent = True
@@ -235,11 +242,13 @@ def check_email_response(email_address, password):
                             fan_turned_on = True
                             return "Fan is on"  # Return fan status
                         elif "yes turn on" in content.lower() and not fan_turned_on:
+                            GPIO.output(MOTOR_ENABLE_PIN, GPIO.HIGH)
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
                             fan_turned_on = True
                             print("Fan is on!")
                             return "Fan is on"  # Return fan status
                         else:
+                            GPIO.output(MOTOR_ENABLE_PIN, GPIO.LOW)
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
                             return "Fan is off"  # Return fan status
         #else:
@@ -287,13 +296,13 @@ def update_data(n):
     chk = dht.readDHT11()
     if chk == dht.DHTLIB_OK:
         # Check if temperature exceeds 24 degrees and email has not been sent
-        if dht.temperature > 24 and not email_sent:
+        if dht.temperature > 21 and not email_sent:
             # Send email notification
             email_subject = "Temperature Alert"
             email_body = f"The current temperature is {dht.temperature}°C. Would you like to turn on the fan?"
             send_email(email_subject, email_body, "zakriasadaf9@gmail.com")
             email_sent = True  # Set email_sent flag to True
-        elif dht.temperature <= 24:
+        elif dht.temperature <= 21:
             email_sent = False  # Reset email_sent flag if temperature falls below 24 degrees
         return dht.temperature, dht.humidity
     else:
@@ -346,13 +355,15 @@ def update_thing(n_intervals):
             currentTime = datetime.datetime.now().strftime("%H:%M:%S")
             body = f"The Light is On at {currentTime}"
             send_email(f"Led Update", body, "zakriasadaf9@gmail.com")
+            # print("Light email sent")
         elif light_intensity >= 400 and not light_email_sent:
             GPIO.output(LED_PIN, GPIO.LOW)
             img_src = '/assets/light_off.png'
-            light_email_sent = True  # Set light_email_sent to True after deciding not to turn on the LED
+            # light_email_sent = True  # Set light_email_sent to True after deciding not to turn on the LED
         elif light_email_sent:
             GPIO.output(LED_PIN, GPIO.HIGH)
             img_src = '/assets/light_on.png'
+        
         
         return [light_intensity, img_src]
     except ValueError:
