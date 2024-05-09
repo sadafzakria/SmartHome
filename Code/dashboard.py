@@ -14,11 +14,85 @@ from dash.exceptions import PreventUpdate
 import paho.mqtt.client as mqtt
 from dash_daq import Gauge
 
+#rfid setup
+rfid_tag = ""
+
+def handle_messages(client, userdata, msg):
+    global rfid_tag
+    # Create a new SQLite connection and cursor
+    conn = sqlite3.connect('user_profiles.db')
+    c = conn.cursor()
+    
+    if msg.topic == "RFID/Tag":
+        rfid_tag = msg.payload
+        # Use the RFID tag ID to retrieve user profile from the database
+        # Execute the SQL query using the cursor
+        c.execute("SELECT * FROM user_profiles WHERE rfid_tag=?", (rfid_tag,))
+        # Fetch the result
+        profile = c.fetchone()
+        if profile:
+            # Print the profile information
+            print("Name:", profile[1])
+            print("Temperature Threshold:", profile[2])
+            print("Humidity Threshold:", profile[3])
+            print("Light Intensity Threshold:", profile[4])
+        else:
+            # Debug the RFID tag if it does not exist in the database
+            print("RFID tag not found in the database:", rfid_tag)
+    
+    # Close the SQLite connection
+    conn.close()
+
+
+# Function to update the user profile section of the dashboard with retrieved user profile information
+def update_user_profile(profile):
+    # Extract profile information
+    name = profile[1]
+    temperature_threshold = profile[2]
+    humidity_threshold = profile[3]
+    light_intensity_threshold = profile[4]
+    # Update user profile section of the dashboard
+    # Update the user profile section of the dashboard with the retrieved user profile information
+    return name, temperature_threshold, humidity_threshold, light_intensity_threshold
+
 
 # MQTT setup
 mqtt_server = "10.0.0.167"
 # mqtt_topic = "light_intensity"
 # client = mqtt.Client()
+mqttc = mqtt.Client()
+
+# Define on_connect function
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+    mqttc.subscribe("RFID/Tag")  # Subscribe to RFID tag topic
+
+# Define on_message function to handle incoming MQTT messages
+def on_message(client, userdata, msg):
+    handle_messages(client, userdata, msg)
+
+mqttc.on_connect = on_connect
+mqttc.on_message = handle_messages
+mqttc.connect(mqtt_server, 1883, 60)
+mqttc.loop_start()
+
+# Database setup
+import sqlite3
+conn = sqlite3.connect('user_profiles.db')
+c = conn.cursor()
+
+# Define function to create user_profiles table if it doesn't exist
+def create_table():
+    c.execute('''CREATE TABLE IF NOT EXISTS user_profiles
+                 (rfid_tag TEXT PRIMARY KEY, name TEXT, temperature_threshold REAL, humidity_threshold REAL, light_intensity_threshold REAL)''')
+
+# Define function to insert a new user profile into the database
+def insert_profile(rfid_tag, name, temperature_threshold, humidity_threshold, light_intensity_threshold):
+    c.execute("INSERT INTO user_profiles (rfid_tag, name, temperature_threshold, humidity_threshold, light_intensity_threshold) VALUES (?, ?, ?, ?, ?)",
+              (rfid_tag, name, temperature_threshold, humidity_threshold, light_intensity_threshold))
+    conn.commit()
+
+
 
 global current_light_intensity
 current_light_intensity = 500
@@ -164,6 +238,23 @@ app.layout = dbc.Container(fluid=True, children=[
                 ])
             ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'}),
         ], width=4),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        html.Div(id='profile-info',className="text-center text-secondary-emphasis", children=[
+                            html.H2("User Profile", className="text-center text-secondary-emphasis"),
+                            html.Img(id='user-image', src='/assets/user.png', style={'width': '100px', 'height': '100px'}),
+
+                            html.H4("Name: ", id='user-name'),
+                            html.H4("Temperature: ", id='temperature-threshold'),
+                            html.H4("Humidity: ", id='humidity-threshold'),
+                            html.H4("Light: ", id='light-intensity-threshold')
+                        ])
+                    ])
+                ])
+            ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'})
+        ])
         
     ]),
     html.Div([
@@ -381,6 +472,44 @@ def update_thing(n_intervals):
 )
 def update_slider_tooltip(value):
     return f"Light Intensity: {value}"
+
+# Callback to update user profile information on the dashboard
+@app.callback(
+    [Output('user-name', 'children'),
+     Output('temperature-threshold', 'children'),
+     Output('humidity-threshold', 'children'),
+     Output('light-intensity-threshold', 'children')],
+    [Input('interval-component', 'n_intervals')]
+)
+def update_user_profile_info(n):
+    global rfid_tag
+    if rfid_tag:
+        c.execute("SELECT * FROM user_profiles WHERE rfid_tag=?", (rfid_tag,))
+        profile = c.fetchone()
+        if profile:
+            return profile[1], f"Temperature Threshold: {profile[2]}", f"Humidity Threshold: {profile[3]}", f"Light Intensity Threshold: {profile[4]}"
+    return "No user logged in", "", "", ""
+
+# Initialize the user_profiles table
+create_table()
+
+# Update the callback to include database operations for user profiles
+@app.callback(
+    [Output('temperature-gauge', 'value'),
+     Output('humidity-gauge', 'value')],
+    [Input('interval-component', 'n_intervals')]
+)
+def update_data(n):
+    global rfid_tag
+    if rfid_tag:
+        # Query the database to get user profile and thresholds
+        c.execute("SELECT * FROM user_profiles WHERE rfid_tag=?", (rfid_tag,))
+        profile = c.fetchone()
+        if profile:
+            # Use profile thresholds for temperature and humidity
+            return profile[2], profile[3]
+    # If no user logged in or profile not found, return default values
+    return 20, 50
 
 
 # Run the app
