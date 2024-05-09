@@ -17,43 +17,72 @@ from dash_daq import Gauge
 #rfid setup
 rfid_tag = ""
 
+#profileExists = False
+
+p_temp = 30
+p_light = 400
+
+#Alerts
+#alerts = dbc.Alert(id="profile-update-alert", color="success", style={"display": "none"})
+
 def handle_messages(client, userdata, msg):
     global rfid_tag
+    #global profileExists
+    global p_temp
     # Create a new SQLite connection and cursor
     conn = sqlite3.connect('user_profiles.db')
     c = conn.cursor()
     
     if msg.topic == "RFID/Tag":
-        rfid_tag = msg.payload
+        rfid_tag = msg.payload.decode('utf-8', 'ignore')  # Decode the RFID tag value
         # Use the RFID tag ID to retrieve user profile from the database
         # Execute the SQL query using the cursor
         c.execute("SELECT * FROM user_profiles WHERE rfid_tag=?", (rfid_tag,))
         # Fetch the result
         profile = c.fetchone()
         if profile:
+            app.layout['profile-update-alert'].style = {"display": "block"}
+                           
+            #profileExists = True
+            p_temp = profile[2]
+            print(f"Temperature Alerts will now be sent at {p_temp}°C.")
+            p_light = profile[4] 
+            print(f"Light Alerts will now be sent at {p_light}.")
             # Print the profile information
+            currentTime = datetime.datetime.now().strftime("%H:%M:%S")
+            email_subject = "User Alert"
+            email_body = f"User {profile[1]} entered at {currentTime}"
+            send_email(email_subject, email_body, "zakriasadaf9@gmail.com")
             print("Name:", profile[1])
             print("Temperature Threshold:", profile[2])
             print("Humidity Threshold:", profile[3])
             print("Light Intensity Threshold:", profile[4])
+            # Update the user profile information on the dashboard
+            update_user_profile_info(profile[1], profile[2], profile[3], profile[4])
         else:
+            profileExists = False
             # Debug the RFID tag if it does not exist in the database
             print("RFID tag not found in the database:", rfid_tag)
-    
-    # Close the SQLite connection
-    conn.close()
+            # Ensure the RFID tag value is properly encoded before inserting into the database
+            c.execute("INSERT INTO user_profiles (rfid_tag, name, temperature_threshold, humidity_threshold, light_intensity_threshold) VALUES (?, 'USER', 0, 0, 0)", (rfid_tag,))
+            print("Added to the database")
+            # Update the user profile information on the dashboard
+            update_user_profile_info('USER', 0, 0, 0)
+        # Commit changes and close the connection
+        conn.commit()
+        conn.close()
 
 
-# Function to update the user profile section of the dashboard with retrieved user profile information
-def update_user_profile(profile):
-    # Extract profile information
-    name = profile[1]
-    temperature_threshold = profile[2]
-    humidity_threshold = profile[3]
-    light_intensity_threshold = profile[4]
-    # Update user profile section of the dashboard
-    # Update the user profile section of the dashboard with the retrieved user profile information
-    return name, temperature_threshold, humidity_threshold, light_intensity_threshold
+# # Function to update the user profile section of the dashboard with retrieved user profile information
+# def update_user_profile(profile):
+#     # Extract profile information
+#     name = profile[1]
+#     temperature_threshold = profile[2]
+#     humidity_threshold = profile[3]
+#     light_intensity_threshold = profile[4]
+#     # Update user profile section of the dashboard
+#     # Update the user profile section of the dashboard with the retrieved user profile information
+#     return name, temperature_threshold, humidity_threshold, light_intensity_threshold
 
 
 # MQTT setup
@@ -130,7 +159,7 @@ GPIO.setup(MOTOR_ENABLE_PIN,GPIO.OUT)
 yag = yagmail.SMTP('szakria03@gmail.com', 'eniwgbsodjybyoae')
 
 # Initialize Dash app
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MORPH])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.QUARTZ])
 
 # Define layout of the dashboard
 app.layout = dbc.Container(fluid=True, children=[
@@ -243,18 +272,27 @@ app.layout = dbc.Container(fluid=True, children=[
                 dbc.CardBody([
                     dbc.Row([
                         html.Div(id='profile-info',className="text-center text-secondary-emphasis", children=[
-                            html.H2("User Profile", className="text-center text-secondary-emphasis"),
+                            #html.H2("User Profile", className="text-center text-secondary-emphasis"),
+                            html.H2("User", id='user-name', className="text-center text-secondary-emphasis"),
                             html.Img(id='user-image', src='/assets/user.png', style={'width': '100px', 'height': '100px'}),
-
-                            html.H4("Name: ", id='user-name'),
-                            html.H4("Temperature: ", id='temperature-threshold'),
-                            html.H4("Humidity: ", id='humidity-threshold'),
-                            html.H4("Light: ", id='light-intensity-threshold')
+                            html.H6(" ", id='temperature-threshold'),
+                            html.H6(" ", id='humidity-threshold'),
+                            html.H6(" ", id='light-intensity-threshold'),
+                            
                         ])
-                    ])
+                        
+                    ]),
+                    
                 ])
-            ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New'})
-        ])
+            ], style={'background-color': 'rgba(255, 255, 255, 0.2)', 'width': '100%', 'font-family': 'Courier New', "margin-bottom": "20px"}),
+            dbc.Row([
+                dbc.Alert("Logged in Successfully", id="profile-update-alert", color="success", style={"display": "none"}),
+                dbc.Alert("Temperature Email Sent", id="temp-update-alert", color="success", style={"display": "none"}),
+                dbc.Alert("Light Email Sent", id="light-update-alert", color="success", style={"display": "none"}),
+
+            ])
+        ]),
+        
         
     ]),
     html.Div([
@@ -304,7 +342,7 @@ def check_email_response(email_address, password):
     global fan_turned_on
     global email_sent
 
-    # Stop checking email if fan is turned on
+    # Stop checking email if fan is temp = 21turned on
     if fan_turned_on and email_sent:
         return "Fan is on"
 
@@ -381,19 +419,22 @@ def get_email_content(msg):
 )
 def update_data(n):
     global email_sent  # Access the global email_sent variable
+    global p_temp
+        
     # Create DHT object
     dht = DHT(DHT_PIN)
     # Read temperature and humidity from DHT11 sensor
     chk = dht.readDHT11()
     if chk == dht.DHTLIB_OK:
         # Check if temperature exceeds 24 degrees and email has not been sent
-        if dht.temperature > 21 and not email_sent:
+        if dht.temperature > p_temp and not email_sent:
             # Send email notification
             email_subject = "Temperature Alert"
             email_body = f"The current temperature is {dht.temperature}°C. Would you like to turn on the fan?"
             send_email(email_subject, email_body, "zakriasadaf9@gmail.com")
+            app.layout['temp-update-alert'].style = {"display": "block", "width": "100%"}
             email_sent = True  # Set email_sent flag to True
-        elif dht.temperature <= 21:
+        elif dht.temperature <= p_temp:
             email_sent = False  # Reset email_sent flag if temperature falls below 24 degrees
         return dht.temperature, dht.humidity
     else:
@@ -438,16 +479,19 @@ def update_fan_status(n):
 def update_thing(n_intervals):
     try:
         global light_email_sent
+        global p_light
+                
         light_intensity = float(current_light_intensity)
-        print("Current light intensity:", light_intensity)  # Debug print statement
-        if light_intensity < 400 and not light_email_sent:
+        # print("Current light intensity:", light_intensity)  # Debug print statement
+        if light_intensity < p_light and not light_email_sent:
             GPIO.output(LED_PIN, GPIO.HIGH)
             img_src = '/assets/light_on.png'
             currentTime = datetime.datetime.now().strftime("%H:%M:%S")
             body = f"The Light is On at {currentTime}"
             send_email(f"Led Update", body, "zakriasadaf9@gmail.com")
+            app.layout['light-update-alert'].style = {"display": "block", "width": "100%"}
             # print("Light email sent")
-        elif light_intensity >= 400 and not light_email_sent:
+        elif light_intensity >= p_light and not light_email_sent:
             GPIO.output(LED_PIN, GPIO.LOW)
             img_src = '/assets/light_off.png'
             # light_email_sent = True  # Set light_email_sent to True after deciding not to turn on the LED
@@ -465,7 +509,6 @@ def update_thing(n_intervals):
 
 
 
-# Callback to update slider tooltip
 @app.callback(
     Output('slider-tooltip', 'children'),
     [Input('light-slider', 'value')]
@@ -474,42 +517,19 @@ def update_slider_tooltip(value):
     return f"Light Intensity: {value}"
 
 # Callback to update user profile information on the dashboard
-@app.callback(
-    [Output('user-name', 'children'),
-     Output('temperature-threshold', 'children'),
-     Output('humidity-threshold', 'children'),
-     Output('light-intensity-threshold', 'children')],
-    [Input('interval-component', 'n_intervals')]
-)
-def update_user_profile_info(n):
-    global rfid_tag
-    if rfid_tag:
-        c.execute("SELECT * FROM user_profiles WHERE rfid_tag=?", (rfid_tag,))
-        profile = c.fetchone()
-        if profile:
-            return profile[1], f"Temperature Threshold: {profile[2]}", f"Humidity Threshold: {profile[3]}", f"Light Intensity Threshold: {profile[4]}"
-    return "No user logged in", "", "", ""
-
+def update_user_profile_info(name, temperature_threshold, humidity_threshold, light_intensity_threshold):
+    # Update user profile information on the dashboard
+    app.layout['user-name'].children = f"{name}"
+    app.layout['temperature-threshold'].children = f"Temperature: {temperature_threshold}"
+    app.layout['humidity-threshold'].children = f"Humidity: {humidity_threshold}"
+    app.layout['light-intensity-threshold'].children = f"Light Intensity: {light_intensity_threshold}"
+    app.layout['profile-update-alert'].style = {"display": "block", "width": "100%"}
+    
+    
+    
 # Initialize the user_profiles table
 create_table()
 
-# Update the callback to include database operations for user profiles
-@app.callback(
-    [Output('temperature-gauge', 'value'),
-     Output('humidity-gauge', 'value')],
-    [Input('interval-component', 'n_intervals')]
-)
-def update_data(n):
-    global rfid_tag
-    if rfid_tag:
-        # Query the database to get user profile and thresholds
-        c.execute("SELECT * FROM user_profiles WHERE rfid_tag=?", (rfid_tag,))
-        profile = c.fetchone()
-        if profile:
-            # Use profile thresholds for temperature and humidity
-            return profile[2], profile[3]
-    # If no user logged in or profile not found, return default values
-    return 20, 50
 
 
 # Run the app
