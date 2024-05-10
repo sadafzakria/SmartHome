@@ -558,6 +558,7 @@ def update_profile(n_clicks, temp_threshold, humidity_threshold, light_intensity
                   (temp_threshold, humidity_threshold, light_intensity_threshold, p_name))
         conn.commit()
         conn.close()
+        update_user_profile_info(p_name, temp_threshold, humidity_threshold, light_intensity_threshold)
         # Return style to display the success alert
         return {"display": "block", "width": "100%"}
     else:
