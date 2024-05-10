@@ -23,6 +23,12 @@ p_temp = 30
 p_light = 400
 p_name = ""
 
+# Initialize email_sent + light_email_sent variable
+email_sent = False
+#global light_email_sent 
+light_email_sent = False
+fan_turned_on = False
+fan_status = 'Fan is off'
 #Alerts
 #alerts = dbc.Alert(id="profile-update-alert", color="success", style={"display": "none"})
 
@@ -32,6 +38,17 @@ def handle_messages(client, userdata, msg):
     global p_temp
     global p_light
     global p_name
+    global email_sent
+    global light_email_sent
+    global fan_turned_on 
+    global fan_status 
+    email_sent = False
+#global light_email_sent 
+    light_email_sent = False
+    fan_turned_on = False
+    fan_status = 'Fan is off'
+    GPIO.output(MOTOR_ENABLE_PIN, GPIO.LOW)
+
     # Create a new SQLite connection and cursor
     conn = sqlite3.connect('user_profiles.db')
     c = conn.cursor()
@@ -91,7 +108,7 @@ def handle_messages(client, userdata, msg):
 
 
 # MQTT setup
-mqtt_server = "172.20.10.2"
+mqtt_server = "192.168.93.209"
 # mqtt_topic = "light_intensity"
 # client = mqtt.Client()
 mqttc = mqtt.Client()
@@ -343,8 +360,7 @@ def send_email(subject, body, to_email):
         print("Failed to send email:", str(e))
 
 # Check for email response and control fan accordingly
-fan_turned_on = False
-fan_status = 'Fan is off'
+
 
 # Check for email response and control fan accordingly
 def check_email_response(email_address, password):
@@ -574,4 +590,4 @@ create_table()
 
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=True, host='172.20.10.2', port='5000')
+    app.run_server(debug=True, host='192.168.93.209', port='5000')
