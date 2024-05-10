@@ -154,6 +154,8 @@ MOTOR_ENABLE_PIN = 22
 MOTOR_PIN = 23
 MOTOR_PIN2 = 12
 GPIO.setup(MOTOR_ENABLE_PIN,GPIO.OUT)
+GPIO.setup(MOTOR_PIN,GPIO.OUT)
+GPIO.setup(MOTOR_PIN2,GPIO.OUT)
 
 # Initialize yagmail SMTP connection
 yag = yagmail.SMTP('szakria03@gmail.com', 'eniwgbsodjybyoae')
@@ -372,6 +374,8 @@ def check_email_response(email_address, password):
                             return "Fan is on"  # Return fan status
                         elif "yes turn on" in content.lower() and not fan_turned_on:
                             GPIO.output(MOTOR_ENABLE_PIN, GPIO.HIGH)
+                            GPIO.output(MOTOR_PIN, GPIO.HIGH)
+                            GPIO.output(MOTOR_PIN2, GPIO.LOW)
                             mail.store(latest_email_id, '+FLAGS', '\Seen')  # Mark the email as read
                             fan_turned_on = True
                             print("Fan is on!")
