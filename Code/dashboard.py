@@ -21,6 +21,7 @@ rfid_tag = ""
 
 p_temp = 30
 p_light = 400
+p_name = ""
 
 #Alerts
 #alerts = dbc.Alert(id="profile-update-alert", color="success", style={"display": "none"})
@@ -29,6 +30,8 @@ def handle_messages(client, userdata, msg):
     global rfid_tag
     #global profileExists
     global p_temp
+    global p_light
+    global p_name
     # Create a new SQLite connection and cursor
     conn = sqlite3.connect('user_profiles.db')
     c = conn.cursor()
@@ -42,12 +45,14 @@ def handle_messages(client, userdata, msg):
         profile = c.fetchone()
         if profile:
             app.layout['profile-update-alert'].style = {"display": "block"}
-                           
+            p_name = profile[1]
+            print("p_name: {p_name}")
             #profileExists = True
             p_temp = profile[2]
             print(f"Temperature Alerts will now be sent at {p_temp}°C.")
             p_light = profile[4] 
-            print(f"Light Alerts will now be sent at {p_light}.")
+            
+            
             # Print the profile information
             currentTime = datetime.datetime.now().strftime("%H:%M:%S")
             email_subject = "User Alert"
@@ -86,7 +91,7 @@ def handle_messages(client, userdata, msg):
 
 
 # MQTT setup
-mqtt_server = "10.0.0.167"
+mqtt_server = "172.20.10.2"
 # mqtt_topic = "light_intensity"
 # client = mqtt.Client()
 mqttc = mqtt.Client()
@@ -153,7 +158,6 @@ GPIO.setup(DHT_PIN, GPIO.OUT)  # Set up DHT11 pin as outputz
 MOTOR_ENABLE_PIN = 22
 MOTOR_PIN = 23
 MOTOR_PIN2 = 12
-GPIO.setup(MOTOR_ENABLE_PIN,GPIO.OUT)
 GPIO.setup(MOTOR_PIN,GPIO.OUT)
 GPIO.setup(MOTOR_PIN2,GPIO.OUT)
 
@@ -275,12 +279,14 @@ app.layout = dbc.Container(fluid=True, children=[
                     dbc.Row([
                         html.Div(id='profile-info',className="text-center text-secondary-emphasis", children=[
                             #html.H2("User Profile", className="text-center text-secondary-emphasis"),
-                            html.H2("User", id='user-name', className="text-center text-secondary-emphasis"),
+                            html.H3("USER",id='user-name', className="text-center text-secondary-emphasis"),
                             html.Img(id='user-image', src='/assets/user.png', style={'width': '100px', 'height': '100px'}),
-                            html.H6(" ", id='temperature-threshold'),
-                            html.H6(" ", id='humidity-threshold'),
-                            html.H6(" ", id='light-intensity-threshold'),
-                            
+                            dbc.Input(type='text', placeholder='Temperature', id='temperature-threshold', size = "sm"),
+                            dbc.Input( type='text', placeholder='Humidity', id='humidity-threshold', size = "sm"),
+                            dbc.Input( type='text', placeholder='Light Intensity', id='light-intensity-threshold', size = "sm"),
+                            dbc.Button(
+                            "UPDATE", id="update-button", outline=True, color="secondary", className="me-1"
+                            ),
                         ])
                         
                     ]),
@@ -480,28 +486,29 @@ def update_fan_status(n):
     prevent_initial_call=True,
     allow_duplicate=True
 )
-def update_thing(n_intervals):
+def update_thing(n):
     try:
         global light_email_sent
         global p_light
-                
         light_intensity = float(current_light_intensity)
         # print("Current light intensity:", light_intensity)  # Debug print statement
-        if light_intensity < p_light and not light_email_sent:
+        img_src = '/assets/light_off.png'
+        print(f"Light Alerts will now be sent at {p_light}.")
+        if light_intensity < p_light:
             GPIO.output(LED_PIN, GPIO.HIGH)
             img_src = '/assets/light_on.png'
             currentTime = datetime.datetime.now().strftime("%H:%M:%S")
             body = f"The Light is On at {currentTime}"
             send_email(f"Led Update", body, "zakriasadaf9@gmail.com")
-            app.layout['light-update-alert'].style = {"display": "block", "width": "100%"}
+            # app.layout['light-update-alert'].style = {"display": "block", "width": "100%"}
             # print("Light email sent")
-        elif light_intensity >= p_light and not light_email_sent:
+        elif light_intensity >= p_light:
             GPIO.output(LED_PIN, GPIO.LOW)
             img_src = '/assets/light_off.png'
             # light_email_sent = True  # Set light_email_sent to True after deciding not to turn on the LED
-        elif light_email_sent:
-            GPIO.output(LED_PIN, GPIO.HIGH)
-            img_src = '/assets/light_on.png'
+        # elif light_intensity < p_light and light_email_sent:
+        #     GPIO.output(LED_PIN, GPIO.HIGH)
+        #     img_src = '/assets/light_on.png'
         
         
         return [light_intensity, img_src]
@@ -523,13 +530,40 @@ def update_slider_tooltip(value):
 # Callback to update user profile information on the dashboard
 def update_user_profile_info(name, temperature_threshold, humidity_threshold, light_intensity_threshold):
     # Update user profile information on the dashboard
+    # app.layout['user-name'].children = f"{name}"
+    # app.layout['temperature-threshold'].children = f"Temperature: {temperature_threshold}"
+    # app.layout['humidity-threshold'].children = f"Humidity: {humidity_threshold}"
+    # app.layout['light-intensity-threshold'].children = f"Light Intensity: {light_intensity_threshold}"
+    # app.layout['profile-update-alert'].style = {"display": "block", "width": "100%"}
     app.layout['user-name'].children = f"{name}"
-    app.layout['temperature-threshold'].children = f"Temperature: {temperature_threshold}"
-    app.layout['humidity-threshold'].children = f"Humidity: {humidity_threshold}"
-    app.layout['light-intensity-threshold'].children = f"Light Intensity: {light_intensity_threshold}"
+    app.layout['temperature-threshold'].placeholder = f"Temperature: {temperature_threshold}"
+    app.layout['humidity-threshold'].placeholder = f"Humidity: {humidity_threshold}"
+    app.layout['light-intensity-threshold'].placeholder = f"Light Intensity: {light_intensity_threshold}"
     app.layout['profile-update-alert'].style = {"display": "block", "width": "100%"}
-    
-    
+# Callback to update the database when the "UPDATE" button is clicked
+@app.callback(
+    Output('profile-update-alert', 'style'),
+    [Input('update-button', 'n_clicks')],
+    [State('temperature-threshold', 'value'),
+     State('humidity-threshold', 'value'),
+     State('light-intensity-threshold', 'value')]
+)
+def update_profile(n_clicks, temp_threshold, humidity_threshold, light_intensity_threshold):
+    global p_name
+    if n_clicks:
+        # Update the database with the new values
+        conn = sqlite3.connect('user_profiles.db')
+        c = conn.cursor()
+        c.execute("UPDATE user_profiles SET temperature_threshold=?, humidity_threshold=?, light_intensity_threshold=? WHERE name=?", 
+                  (temp_threshold, humidity_threshold, light_intensity_threshold, p_name))
+        conn.commit()
+        conn.close()
+        # Return style to display the success alert
+        return {"display": "block", "width": "100%"}
+    else:
+        # Return default style
+        return {"display": "none"}
+
     
 # Initialize the user_profiles table
 create_table()
@@ -538,4 +572,4 @@ create_table()
 
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=True, host='10.0.0.167', port='5000')
+    app.run_server(debug=True, host='172.20.10.2', port='5000')
